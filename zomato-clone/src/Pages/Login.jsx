@@ -56,7 +56,12 @@ const Login = () => {
       if (err.response?.data?.message) {
         setError(err.response.data.message);
       } else if (err.code === "ECONNABORTED" || err.message?.includes("Network Error")) {
-        setError("Unable to connect to the backend server. Please verify the API is running.");
+        const isLive = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        if (isLive) {
+          setError("The live frontend cannot reach the backend: No live backend API URL (VITE_API_URL) is configured for production, or the cloud server is asleep.");
+        } else {
+          setError("Backend server is not running on port 5001. Please make sure the backend is started.");
+        }
       } else {
         setError("Invalid email or password. Please try again.");
       }
