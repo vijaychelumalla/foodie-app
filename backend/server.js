@@ -19,17 +19,19 @@ app.use(cors());
 const authRoutes = require('./routes/authRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/orders', orderRoutes);
 
 // Base route
-app.get('/', (req, res) => {
+app.get(['/', '/api'], (req, res) => {
   res.send('Zomato Clone API is running...');
 });
 
 const PORT = process.env.PORT || 5001;
 
 let server;
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL && require.main === module) {
   server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 

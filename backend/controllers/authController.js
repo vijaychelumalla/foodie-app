@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
+const memoryStore = require('../data/memoryStore');
 
 // Helper function to generate JWT
 const generateToken = (id) => {
@@ -30,34 +32,59 @@ exports.signup = async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if user exists
-    const userExists = await User.findOne({ email: normalizedEmail });
+    // Check if connected to MongoDB
+    if (mongoose.connection.readyState === 1) {
+      const userExists = await User.findOne({ email: normalizedEmail });
 
-    if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
+      if (userExists) {
+        return res.status(400).json({ message: 'User already exists' });
+      }
 
-    // Create user (strictly default isAdmin to false to prevent privilege escalation)
-    const user = await User.create({
-      fullName: fullName.trim(),
-      email: normalizedEmail,
-      phone: phone.trim(),
-      password,
-      isAdmin: false
-    });
+      const user = await User.create({
+        fullName: fullName.trim(),
+        email: normalizedEmail,
+        phone: phone.trim(),
+        password,
+        isAdmin: false
+      });
 
-    if (user) {
+      if (user) {
+        return res.status(201).json({
+          _id: user._id,
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          isAdmin: user.isAdmin,
+          token: generateToken(user._id),
+        });
+      }
+    } else {
+      // In-memory fallback
+      const userExists = await memoryStore.findUserByEmail(normalizedEmail);
+      if (userExists) {
+        return res.status(400).json({ message: 'User already exists' });
+      }
+
+      const user = await memoryStore.createUser({
+        fullName,
+        email: normalizedEmail,
+        phone,
+        password
+      });
+
       return res.status(201).json({
         _id: user._id,
+        id: user._id,
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
         isAdmin: user.isAdmin,
         token: generateToken(user._id),
       });
-    } else {
-      return res.status(400).json({ message: 'Invalid user data' });
     }
+
+    return res.status(400).json({ message: 'Invalid user data' });
   } catch (error) {
     console.error('Signup error:', error);
     return res.status(500).json({ message: 'Server error' });
@@ -77,21 +104,36 @@ exports.login = async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check for user email
-    const user = await User.findOne({ email: normalizedEmail }).select('+password');
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
-    if (user && (await user.matchPassword(password))) {
-      return res.json({
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        isAdmin: user.isAdmin,
-        token: generateToken(user._id),
-      });
+      if (user && (await user.matchPassword(password))) {
+        return res.json({
+          _id: user._id,
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          isAdmin: user.isAdmin,
+          token: generateToken(user._id),
+        });
+      }
     } else {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      const user = await memoryStore.findUserByEmail(normalizedEmail);
+      if (user && (await memoryStore.matchPassword(password, user.passwordHash))) {
+        return res.json({
+          _id: user._id,
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
+          isAdmin: user.isAdmin,
+          token: generateToken(user._id),
+        });
+      }
     }
+
+    return res.status(401).json({ message: 'Invalid email or password' });
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({ message: 'Server error' });
@@ -103,11 +145,26 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findById(req.user._id).select('-password');
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      return res.status(200).json(user);
+    } else {
+      const user = await memoryStore.findUserById(req.user._id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      return res.status(200).json({
+        _id: user._id,
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        isAdmin: user.isAdmin
+      });
     }
-    return res.status(200).json(user);
   } catch (error) {
     return res.status(500).json({ message: 'Server error' });
   }
@@ -115,13 +172,18 @@ exports.getMe = async (req, res) => {
 
 // @desc    Get all registered users (Admin Dashboard)
 // @route   GET /api/auth/users
-// @access  Public (for testing)
+// @access  Private (Admin)
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    res.status(200).json(users);
+    if (mongoose.connection.readyState === 1) {
+      const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+      return res.status(200).json(users);
+    } else {
+      const users = await memoryStore.getAllUsers();
+      return res.status(200).json(users);
+    }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error fetching users' });
+    return res.status(500).json({ message: 'Server error fetching users' });
   }
 };

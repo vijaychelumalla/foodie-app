@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+// Dynamically select base API URL:
+// 1. Explicit VITE_API_URL if configured
+// 2. Default to relative '' so /api routes directly:
+//    - Locally: Vite proxies /api to http://localhost:5001
+//    - On Vercel: Vercel serverless function handles /api on the same domain
+const baseURL = import.meta.env.VITE_API_URL || '';
 
 const apiClient = axios.create({
   baseURL,

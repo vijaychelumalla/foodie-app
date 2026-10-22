@@ -1,5 +1,7 @@
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const menuCatalog = require('../data/menuCatalog');
+const memoryStore = require('../data/memoryStore');
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -35,7 +37,6 @@ const createOrder = async (req, res) => {
       // Check server catalog price
       let unitPrice = menuCatalog[item.name];
       if (unitPrice === undefined) {
-        // Fallback for custom items: validate positive number
         const passedPrice = parseFloat(item.price);
         if (isNaN(passedPrice) || passedPrice <= 0) {
           return res.status(400).json({ message: `Invalid price for item ${item.name}` });
@@ -66,21 +67,37 @@ const createOrder = async (req, res) => {
       }
     }
 
-    const order = new Order({
-      user: req.user._id,
-      deliveryInfo: {
-        fullName: deliveryInfo.fullName.trim(),
-        phone: deliveryInfo.phone.trim(),
-        address: deliveryInfo.address.trim(),
-        city: deliveryInfo.city.trim(),
-        pinCode: deliveryInfo.pinCode.trim()
-      },
-      orderItems: validatedOrderItems,
-      totalAmount: expectedTotal
-    });
+    if (mongoose.connection.readyState === 1) {
+      const order = new Order({
+        user: req.user._id,
+        deliveryInfo: {
+          fullName: deliveryInfo.fullName.trim(),
+          phone: deliveryInfo.phone.trim(),
+          address: deliveryInfo.address.trim(),
+          city: deliveryInfo.city.trim(),
+          pinCode: deliveryInfo.pinCode.trim()
+        },
+        orderItems: validatedOrderItems,
+        totalAmount: expectedTotal
+      });
 
-    const createdOrder = await order.save();
-    return res.status(201).json(createdOrder);
+      const createdOrder = await order.save();
+      return res.status(201).json(createdOrder);
+    } else {
+      const createdOrder = await memoryStore.createOrder({
+        userId: req.user._id,
+        deliveryInfo: {
+          fullName: deliveryInfo.fullName.trim(),
+          phone: deliveryInfo.phone.trim(),
+          address: deliveryInfo.address.trim(),
+          city: deliveryInfo.city.trim(),
+          pinCode: deliveryInfo.pinCode.trim()
+        },
+        orderItems: validatedOrderItems,
+        totalAmount: expectedTotal
+      });
+      return res.status(201).json(createdOrder);
+    }
   } catch (error) {
     console.error('Error creating order:', error);
     return res.status(500).json({ message: 'Failed to place order' });
@@ -92,8 +109,13 @@ const createOrder = async (req, res) => {
 // @access  Private
 const getMyOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
-    return res.json(orders);
+    if (mongoose.connection.readyState === 1) {
+      const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
+      return res.json(orders);
+    } else {
+      const orders = await memoryStore.getOrdersByUser(req.user._id);
+      return res.json(orders);
+    }
   } catch (error) {
     console.error('Error fetching orders:', error);
     return res.status(500).json({ message: 'Failed to fetch orders' });
@@ -105,8 +127,12 @@ const getMyOrders = async (req, res) => {
 // @access  Private/Admin
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find({}).populate('user', 'fullName email phone').sort({ createdAt: -1 });
-    return res.json(orders);
+    if (mongoose.connection.readyState === 1) {
+      const orders = await Order.find({}).populate('user', 'fullName email phone').sort({ createdAt: -1 });
+      return res.json(orders);
+    } else {
+      return res.json(memoryStore.memoryOrders);
+    }
   } catch (error) {
     console.error('Error fetching all orders:', error);
     return res.status(500).json({ message: 'Failed to fetch all orders' });
