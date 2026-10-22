@@ -15,7 +15,7 @@ const Search = () => {
       alert("Please login to place your order!");
       navigate("/login", { state: { from: "/search?q=" + query } });
     } else {
-      alert("Order placed successfully! Redirecting to payment...");
+      navigate("/checkout");
     }
   };
 

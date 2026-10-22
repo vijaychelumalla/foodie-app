@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import apiClient from "../api/apiClient";
+import { useAuth } from "../context/AuthContext";
 
 const Admin = () => {
+  const { isAdmin, isAuthenticated } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
-
-  const userStr = localStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
-    if (!user || user.isAdmin !== true) {
+    if (!isAuthenticated || !isAdmin) {
       setError("403 FORBIDDEN: You do not have active Administrator privileges to view this area.");
       setLoading(false);
       return;
@@ -21,8 +17,7 @@ const Admin = () => {
 
     const fetchUsers = async () => {
       try {
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-        const response = await axios.get("http://localhost:5000/api/auth/users", config);
+        const response = await apiClient.get("/api/auth/users");
         setUsers(response.data);
         setLoading(false);
       } catch (err) {
@@ -31,7 +26,7 @@ const Admin = () => {
       }
     };
     fetchUsers();
-  }, [user, token]);
+  }, [isAuthenticated, isAdmin]);
 
   return (
     <div className="bg-[#fafafa] min-h-screen p-8 animate-fade-in-up">

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import apiClient from '../api/apiClient';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const OrderHistory = () => {
+  const { isAuthenticated } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10,20 +12,13 @@ const OrderHistory = () => {
 
   useEffect(() => {
     const fetchMyOrders = async () => {
+      if (!isAuthenticated) {
+        navigate('/login', { state: { from: '/history' } });
+        return;
+      }
+
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          navigate('/login', { state: { from: '/history' } });
-          return;
-        }
-
-        const config = {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        };
-
-        const { data } = await axios.get('http://localhost:5000/api/orders/myorders', config);
+        const { data } = await apiClient.get('/api/orders/myorders');
         setOrders(data);
         setLoading(false);
       } catch (err) {
@@ -33,7 +28,7 @@ const OrderHistory = () => {
     };
 
     fetchMyOrders();
-  }, [navigate]);
+  }, [navigate, isAuthenticated]);
 
   return (
     <div className="bg-[#fafafa] min-h-screen py-10 animate-fade-in-up">

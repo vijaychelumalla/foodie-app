@@ -3,7 +3,7 @@ const User = require('../models/User');
 
 // Helper function to generate JWT
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+  return jwt.sign({ id }, process.env.JWT_SECRET || 'foodie_app_jwt_secret_dev_key_2026', {
     expiresIn: '30d',
   });
 };
@@ -15,35 +15,52 @@ exports.signup = async (req, res) => {
   try {
     const { fullName, email, phone, password } = req.body;
 
+    if (!fullName || !email || !phone || !password) {
+      return res.status(400).json({ message: 'Please provide all required fields' });
+    }
+
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Check if user exists
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
 
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Create user
+    // Create user (strictly default isAdmin to false to prevent privilege escalation)
     const user = await User.create({
-      fullName,
-      email,
-      phone,
+      fullName: fullName.trim(),
+      email: normalizedEmail,
+      phone: phone.trim(),
       password,
+      isAdmin: false
     });
 
     if (user) {
-      res.status(201).json({
-        _id: user.id,
+      return res.status(201).json({
+        _id: user._id,
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
+        isAdmin: user.isAdmin,
         token: generateToken(user._id),
       });
     } else {
-      res.status(400).json({ message: 'Invalid user data' });
+      return res.status(400).json({ message: 'Invalid user data' });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Signup error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -54,12 +71,18 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please provide email and password' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Check for user email
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
     if (user && (await user.matchPassword(password))) {
-      res.json({
-        _id: user.id,
+      return res.json({
+        _id: user._id,
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
@@ -67,11 +90,11 @@ exports.login = async (req, res) => {
         token: generateToken(user._id),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -80,10 +103,13 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    res.status(200).json(user);
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    return res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 

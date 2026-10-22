@@ -1,14 +1,13 @@
 import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
-  const { totalItems } = useCart();
+  const { totalItems, clearCart } = useCart();
+  const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-
-  const userStr = localStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -16,6 +15,14 @@ const Navbar = () => {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
+
+  const handleLogout = () => {
+    clearCart();
+    logout();
+    navigate('/login');
+  };
+
+  const displayName = user?.fullName?.split(' ')[0] || user?.name || user?.email?.split('@')[0] || 'User';
 
   return (
     <div className='sticky top-0 z-50 glass-panel shadow-sm'>
@@ -45,11 +52,11 @@ const Navbar = () => {
               <NavLink to='/' className={({ isActive }) => isActive ? 'text-primary-600 font-bold transition' : 'hover:text-primary-500 transition cursor-pointer'}>Home</NavLink>
             </li>
             
-            {user && user.isAdmin && (
+            {isAuthenticated && isAdmin && (
               <li>
                 <NavLink to='/admin' className={({ isActive }) => isActive ? 'text-primary-600 font-bold transition flex items-center gap-1.5' : 'hover:text-primary-500 transition cursor-pointer flex items-center gap-1.5'}>
                   <svg className="w-4 h-4 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
-                  Admin <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ml-1">Logged In</span>
+                  Admin <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ml-1">Admin</span>
                 </NavLink>
               </li>
             )}
@@ -57,7 +64,7 @@ const Navbar = () => {
             <li>
               <NavLink to='/our_menu' className={({ isActive }) => isActive ? 'text-primary-600 font-bold transition' : 'hover:text-primary-500 transition cursor-pointer'}>Menu</NavLink>
             </li>
-            {user && (
+            {isAuthenticated && (
               <li>
                 <NavLink to='/history' className={({ isActive }) => isActive ? 'text-primary-600 font-bold transition' : 'hover:text-primary-500 transition cursor-pointer'}>History</NavLink>
               </li>
@@ -71,7 +78,7 @@ const Navbar = () => {
               </NavLink>
             </li>
 
-            {!user ? (
+            {!isAuthenticated ? (
               <>
                 <li>
                   <NavLink to='/login' className={({ isActive }) => isActive ? 'text-primary-600 font-bold transition' : 'hover:text-primary-500 transition cursor-pointer'}>Login</NavLink>
@@ -82,14 +89,10 @@ const Navbar = () => {
               </>
             ) : (
                <li className="flex items-center gap-4 border-l border-gray-200 pl-6 ml-2">
-                  <span className="text-gray-900 font-bold text-sm">Hi, {user.fullName.split(" ")[0]}</span>
+                  <span className="text-gray-900 font-bold text-sm">Hi, {displayName}</span>
                   <button 
-                     onClick={() => {
-                        localStorage.removeItem("user");
-                        localStorage.removeItem("token");
-                        navigate("/login");
-                     }} 
-                     className='bg-gray-100 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-200 transition-colors shadow-sm text-sm font-semibold'
+                     onClick={handleLogout} 
+                     className='bg-gray-100 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-200 transition-colors shadow-sm text-sm font-semibold cursor-pointer'
                   >
                      Logout
                   </button>

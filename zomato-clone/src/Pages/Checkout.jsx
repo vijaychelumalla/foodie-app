@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import apiClient from '../api/apiClient';
 
 const Checkout = () => {
   const { cartItems, totalPrice, clearCart } = useCart();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: '',
+    fullName: user?.fullName || user?.name || '',
+    phone: user?.phone || '',
     address: '',
     city: '',
     pinCode: '',
@@ -17,6 +19,17 @@ const Checkout = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Keep form in sync if user loads
+  useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: prev.fullName || user.fullName || user.name || '',
+        phone: prev.phone || user.phone || '',
+      }));
+    }
+  }, [user]);
 
   // If cart is empty, redirect back to menu
   if (cartItems.length === 0) {
@@ -26,7 +39,7 @@ const Checkout = () => {
         <p className="text-gray-500 mb-8">Please add items from the menu before checking out.</p>
         <button 
           onClick={() => navigate('/our_menu')}
-          className="bg-primary-600 text-white px-8 py-3 rounded-full font-bold hover:bg-primary-700 transition"
+          className="bg-primary-600 text-white px-8 py-3 rounded-full font-bold hover:bg-primary-700 transition cursor-pointer"
         >
           Go back to Menu
         </button>
@@ -35,6 +48,7 @@ const Checkout = () => {
   }
 
   const handleChange = (e) => {
+    setError(null);
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -43,42 +57,27 @@ const Checkout = () => {
     setLoading(true);
     setError(null);
 
-    const token = localStorage.getItem('token');
-    
-    if (!token) {
-      alert("Please login first!");
+    if (!isAuthenticated) {
       navigate('/login', { state: { from: '/checkout' } });
       return;
     }
 
     try {
-      const config = {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      };
-
       const finalTotal = totalPrice + Math.floor(totalPrice * 0.05);
 
-       await axios.post(
-        'http://localhost:5000/api/orders',
-        {
-          deliveryInfo: formData,
-          orderItems: cartItems,
-          totalAmount: finalTotal
-        },
-        config
-      );
+      await apiClient.post('/api/orders', {
+        deliveryInfo: formData,
+        orderItems: cartItems,
+        totalAmount: finalTotal
+      });
 
       setLoading(false);
       clearCart();
-      alert("Order placed successfully! Redirecting...");
-      navigate('/');
+      navigate('/history');
     } catch (err) {
       setLoading(false);
-      console.error(err);
-      setError(err.response?.data?.message || 'Failed to place order. Try again.');
+      console.error('Checkout error:', err);
+      setError(err.response?.data?.message || 'Failed to place order. Please try again.');
     }
   };
 
@@ -88,7 +87,7 @@ const Checkout = () => {
     <div className="bg-[#fafafa] min-h-screen py-10 animate-fade-in-up">
       <div className="max-w-[1000px] mx-auto px-6">
         
-        <div className="mb-8 items-center cursor-pointer text-gray-600 hover:text-gray-900 inline-flex" onClick={() => navigate(-1)}>
+        <div className="mb-8 items-center cursor-pointer text-gray-600 hover:text-gray-900 inline-flex font-medium" onClick={() => navigate(-1)}>
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Back
         </div>
@@ -101,7 +100,12 @@ const Checkout = () => {
           <div className="flex-1 bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b border-gray-100 pb-4">Delivery Information</h2>
             
-            {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 font-medium text-sm">{error}</div>}
+            {error && (
+              <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 font-medium text-sm border border-red-100 flex items-center gap-2">
+                <svg className="w-5 h-5 flex-shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path></svg>
+                <span>{error}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               
@@ -114,7 +118,7 @@ const Checkout = () => {
                     required
                     value={formData.fullName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 text-sm"
                     placeholder="Enter your full name"
                   />
                 </div>
@@ -126,7 +130,7 @@ const Checkout = () => {
                     required
                     value={formData.phone}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 text-sm"
                     placeholder="10-digit number"
                   />
                 </div>
@@ -140,7 +144,7 @@ const Checkout = () => {
                   rows="3"
                   value={formData.address}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 resize-none text-sm"
                   placeholder="Street, House No, Landmark"
                 ></textarea>
               </div>
@@ -154,8 +158,8 @@ const Checkout = () => {
                     required
                     value={formData.city}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800"
-                    placeholder="E.g., Vesu, Piplod"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 text-sm"
+                    placeholder="E.g., Mumbai, Surat, Delhi"
                   />
                 </div>
                 <div>
@@ -166,7 +170,7 @@ const Checkout = () => {
                     required
                     value={formData.pinCode}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-800 text-sm"
                     placeholder="E.g., 395007"
                   />
                 </div>
@@ -176,9 +180,16 @@ const Checkout = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-black text-white hover:bg-gray-800 font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:bg-gray-400"
+                  className="w-full bg-black text-white hover:bg-gray-800 font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:bg-gray-400 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {loading ? 'Placing Order...' : 'Confirm Order (Cash on Delivery)'}
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      <span>Placing Order...</span>
+                    </>
+                  ) : (
+                    'Confirm Order (Cash on Delivery)'
+                  )}
                 </button>
               </div>
             </form>
